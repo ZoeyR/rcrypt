@@ -1,0 +1,8 @@
+[package]
+
+name = "rcrypt"
+version = "0.0.1"
+authors = ["Daniel Griffen <daniel@dgriffen.com>"]
+
+[dependencies]
+num = "*"
