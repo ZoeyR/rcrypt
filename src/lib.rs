@@ -3,4 +3,4 @@ extern crate rand;
 
 pub mod rsa;
 
-mod num_ext;
+pub mod num_ext;
