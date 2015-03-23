@@ -24,6 +24,8 @@ impl BigIntCrypto for BigInt {
         let mut nextPrime = self.clone();
         if &nextPrime % &two == Zero::zero() {
             nextPrime = &nextPrime + &one;
+        } else {
+            nextPrime = &nextPrime + &two;
         }
         while !BigInt::is_prime(&nextPrime) {
             nextPrime = &nextPrime + &two;
