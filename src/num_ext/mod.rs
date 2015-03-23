@@ -1,46 +1,48 @@
-use num::bigint::{RandBigInt, BigInt};
-use num::{Zero, One, pow};
-use std::num::{FromPrimitive};
+use num::bigint::{ToBigUint, RandBigInt, BigUint};
+use num::{Zero, One};
 use num::integer::Integer;
 use rand::thread_rng;
 
-/// Cryptographically useful extensions to the provided BigInt functionality.
-pub trait BigIntCrypto {
-    /// Find the next prime from the current BigInt
-    fn next_prime(&self) -> BigInt;
+/// Cryptographically useful extensions to the provided BigUint functionality.
+pub trait BigUintCrypto {
+    /// Find the next prime from the current BigUint
+    fn next_prime(&self) -> BigUint;
 
     /// use the extended euclidean algorithm to solve for (g,x,y) given (a,b) such that
     /// g = gcd(a,b) = a*x + b*y.
-    fn gcdext(&self, other: &BigInt) -> (BigInt, BigInt, BigInt);
+    fn gcdext(&self, other: &BigUint) -> (BigUint, BigUint, BigUint);
 
     /// Is this number a prime number. Uses a probablistic function to determine primality.
-    fn is_prime(n: &BigInt) -> bool;
+    fn is_prime(n: &BigUint) -> bool;
+
+    /// perform the function (base^exponent) % modulus using exponentiation by sqauring
+    fn mod_exp(base: &BigUint, exponent: &BigUint, modulus: &BigUint) -> BigUint;
 }
 
-impl BigIntCrypto for BigInt {
-    fn next_prime(&self) -> BigInt {
-        let one: BigInt = One::one();
-        let two = BigInt::from_isize(2).unwrap();
-        let mut nextPrime = self.clone();
-        if &nextPrime % &two == Zero::zero() {
-            nextPrime = &nextPrime + &one;
+impl BigUintCrypto for BigUint {
+    fn next_prime(&self) -> BigUint {
+        let one: BigUint = One::one();
+        let two = 2.to_biguint().unwrap();
+        let mut next_prime = self.clone();
+        if &next_prime % &two == Zero::zero() {
+            next_prime = &next_prime + &one;
         } else {
-            nextPrime = &nextPrime + &two;
+            next_prime = &next_prime + &two;
         }
-        while !BigInt::is_prime(&nextPrime) {
-            nextPrime = &nextPrime + &two;
+        while !BigUint::is_prime(&next_prime) {
+            next_prime = &next_prime + &two;
         }
-        nextPrime
+        next_prime
     }
 
-    fn gcdext(&self, other: &BigInt) -> (BigInt, BigInt, BigInt) {
+    fn gcdext(&self, other: &BigUint) -> (BigUint, BigUint, BigUint) {
 
         (Zero::zero(), Zero::zero(), Zero::zero())
     }
 
-    fn is_prime(n: &BigInt) -> bool {
-        let two = BigInt::from_isize(2).unwrap();
-        let three = BigInt::from_isize(3).unwrap();
+    fn is_prime(n: &BigUint) -> bool {
+        let two = 2.to_biguint().unwrap();
+        let three = 3.to_biguint().unwrap();
         if *n == three || *n == two {
             return true;
         }
@@ -50,31 +52,46 @@ impl BigIntCrypto for BigInt {
         miller_rabin(n, 100)
     }
 
-
+    fn mod_exp(base: &BigUint, exponent: &BigUint, modulus: &BigUint) -> BigUint {
+        let zero = Zero::zero();
+        let one: BigUint = One::one();
+        let two = &one + &one;
+        let mut result: BigUint = One::one();
+        let mut base_acc = base.clone();
+        let mut exp_acc = exponent.clone();
+        while exp_acc > zero {
+            if (&exp_acc % &two) == one {
+                result = (result * &base_acc) % modulus;
+            }
+            exp_acc = exp_acc >> 1;
+            base_acc = (&base_acc * &base_acc) % modulus;
+        }
+        result
+    }
 }
 
 /// n must be greater than 3 and k indicates the number of rounds
-fn miller_rabin(n: &BigInt, k: usize) -> bool{
-    let one: BigInt = One::one();
-    let two: BigInt = &one + &one;
-    let mut d: BigInt = n - &One::one();
-    let mut s: BigInt = Zero::zero();
+fn miller_rabin(n: &BigUint, k: usize) -> bool{
+    let one: BigUint = One::one();
+    let two: BigUint = &one + &one;
+    let mut d: BigUint = n - &One::one();
+    let mut s: BigUint = Zero::zero();
     while d.is_even() {
         d = d >> 1;
         s = s + &One::one();
     }
 
-    for j in 0..k {
+    for _ in 0..k {
         //println!("loop {} of {}", j, k);
-        let a = thread_rng().gen_bigint_range(&two, &(n - &two));
+        let a = thread_rng().gen_biguint_range(&two, &(n - &two));
         let mut x = mod_exp(&a, &d, n);
         //let mut x = two.clone();
         if (x == one) || (x == (n - &one)) {
             continue;
         }
 
-        // Use a while loop instead of for here because range does not accept BigInt
-        let mut i: BigInt = Zero::zero();
+        // Use a while loop instead of for here because range does not accept BigUint
+        let mut i: BigUint = Zero::zero();
         loop  {
             x = mod_exp(&x, &two, n);
             if x == one || i == (&s - &one) {
@@ -89,11 +106,11 @@ fn miller_rabin(n: &BigInt, k: usize) -> bool{
     true
 }
 
-fn mod_exp(base: &BigInt, exponent: &BigInt, modulus: &BigInt) -> BigInt {
+fn mod_exp(base: &BigUint, exponent: &BigUint, modulus: &BigUint) -> BigUint {
     let zero = Zero::zero();
-    let one: BigInt = One::one();
+    let one: BigUint = One::one();
     let two = &one + &one;
-    let mut result: BigInt = One::one();
+    let mut result: BigUint = One::one();
     let mut base_acc = base.clone();
     let mut exp_acc = exponent.clone();
     while exp_acc > zero {
@@ -106,19 +123,20 @@ fn mod_exp(base: &BigInt, exponent: &BigInt, modulus: &BigInt) -> BigInt {
     result
 }
 
-mod test_bigint_crypto {
-    use super::{BigIntCrypto, mod_exp};
-    use num::bigint::{RandBigInt, BigInt};
+#[cfg(test)]
+mod test_BigUint_crypto {
+    use super::{BigUintCrypto, mod_exp};
+    use num::bigint::{RandBigInt, BigUint};
     use std::num::FromPrimitive;
     use num::One;
     use rand::thread_rng;
 
     #[test]
     fn next_prime_test() {
-        let test_num = BigInt::
+        let test_num = BigUint::
         parse_bytes("4829837983753984028472098472089547098728675098723407520875258".as_bytes(), 10).unwrap();
 
-        let expected_next = BigInt::
+        let expected_next = BigUint::
         parse_bytes("4829837983753984028472098472089547098728675098723407520875297".as_bytes(), 10).unwrap();
 
         assert!(test_num.next_prime() == expected_next);
@@ -126,30 +144,30 @@ mod test_bigint_crypto {
 
     #[test]
     fn mod_exp_test() {
-        let base = BigInt::from_isize(4).unwrap();
-        let exponent = BigInt::from_isize(13).unwrap();
-        let modulus = BigInt::from_isize(497).unwrap();
-        let expected_result = BigInt::from_isize(445).unwrap();
+        let base = BigUint::from_isize(4).unwrap();
+        let exponent = BigUint::from_isize(13).unwrap();
+        let modulus = BigUint::from_isize(497).unwrap();
+        let expected_result = BigUint::from_isize(445).unwrap();
 
         assert!(mod_exp(&base, &exponent, &modulus) == expected_result);
-
-        // time test, this takes a long time to do!
-        let large_num = BigInt::
-        parse_bytes("4829837983753984028472098472089547098728675098723407520875297".as_bytes(), 10).unwrap();
-        let a = thread_rng().gen_bigint_range(&One::one(), &large_num);
-        let b = thread_rng().gen_bigint_range(&One::one(), &large_num);
-        let c = thread_rng().gen_bigint_range(&One::one(), &large_num);
-        for _ in 0..100 {
-            mod_exp(&a, &b, &c);
-        }
     }
 
     #[test]
     fn is_prime_test() {
-        let known_prime = BigInt::
+        let known_prime = BigUint::
         parse_bytes("4829837983753984028472098472089547098728675098723407520875297".as_bytes(), 10).unwrap();
 
-        assert!(BigInt::is_prime(&known_prime));
+        assert!(BigUint::is_prime(&known_prime));
+    }
+
+    #[test]
+    #[should_fail]
+    fn is_prime_test_failuire() {
+        let not_prime = BigUint::
+        parse_bytes("359709793871987301975987296195681798740165298740176567105918720469720137416098423"
+        .as_bytes(), 10).unwrap();
+
+        assert!(BigUint::is_prime(&not_prime));
     }
 
 }
