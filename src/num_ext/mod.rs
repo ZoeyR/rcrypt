@@ -27,7 +27,6 @@ impl BigIntCrypto for BigInt {
         }
         while !BigInt::is_prime(&nextPrime) {
             nextPrime = &nextPrime + &two;
-            println!("testing: {}", nextPrime);
         }
         nextPrime
     }
