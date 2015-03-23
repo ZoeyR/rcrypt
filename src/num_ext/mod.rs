@@ -90,16 +90,17 @@ fn miller_rabin(n: &BigInt, k: usize) -> bool{
 }
 
 fn mod_exp(base: &BigInt, exponent: &BigInt, modulus: &BigInt) -> BigInt {
+    let zero = Zero::zero();
     let one: BigInt = One::one();
     let two = &one + &one;
     let mut result: BigInt = One::one();
     let mut base_acc = base.clone();
     let mut exp_acc = exponent.clone();
-    while exp_acc > Zero::zero() {
-        if (&exp_acc % &two) == One::one() {
+    while exp_acc > zero {
+        if (&exp_acc % &two) == one {
             result = (result * &base_acc) % modulus;
         }
-        exp_acc = exp_acc >> One::one();
+        exp_acc = exp_acc >> 1;
         base_acc = (&base_acc * &base_acc) % modulus;
     }
     result
