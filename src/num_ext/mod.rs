@@ -2,6 +2,8 @@ use num::bigint::{ToBigUint, RandBigInt, BigUint};
 use num::{Zero, One};
 use num::integer::Integer;
 use rand::thread_rng;
+use std::sync::{Arc, mpsc};
+use std::thread;
 
 /// Cryptographically useful extensions to the provided BigUint functionality.
 pub trait BigUintCrypto {
@@ -73,18 +75,48 @@ impl BigUintCrypto for BigUint {
 /// n must be greater than 3 and k indicates the number of rounds
 fn miller_rabin(n: &BigUint, k: usize) -> bool{
     let one: BigUint = One::one();
-    let two: BigUint = &one + &one;
+    let (tx, rx) = mpsc::channel();
+
     let mut d: BigUint = n - &One::one();
     let mut s: BigUint = Zero::zero();
     while d.is_even() {
         d = d >> 1;
-        s = s + &One::one();
+        s = s + &one;
     }
+    let shared_n = Arc::new(n.clone());
+    let shared_d = Arc::new(d);
+    let shared_s = Arc::new(s);
+
+    // miller rabin lends itself to being concurrent since a is completely random
+    // here we spawn multiple threads to help speed up the process
+    for _ in 0..8 {
+        let tx = tx.clone();
+        //let thread_n = n.clone();
+        let shared_d = shared_d.clone();
+        let shared_s = shared_s.clone();
+        let shared_n = shared_n.clone();
+        thread::spawn(move || {
+            let result = miller_rabin_thread(&shared_n, &shared_d, &shared_s, k/8);
+            tx.send(result);
+            });
+    }
+
+    for _ in 0..8 {
+        if !rx.recv().ok().expect("A thread failed") {
+            return false;
+        }
+    }
+    true
+}
+
+fn miller_rabin_thread(n: &BigUint, d: &BigUint, s: &BigUint, k: usize) -> bool {
+    let one: BigUint = One::one();
+    let two: BigUint = &one + &one;
 
     for _ in 0..k {
         //println!("loop {} of {}", j, k);
         let a = thread_rng().gen_biguint_range(&two, &(n - &two));
-        let mut x = mod_exp(&a, &d, n);
+        let mut x = mod_exp(&a, d, n);
         //let mut x = two.clone();
         if (x == one) || (x == (n - &one)) {
             continue;
@@ -94,7 +126,7 @@ fn miller_rabin(n: &BigUint, k: usize) -> bool{
         let mut i: BigUint = Zero::zero();
         loop  {
             x = mod_exp(&x, &two, n);
-            if x == one || i == (&s - &one) {
+            if x == one || i == (s - &one) {
                 return false;
             }
             if x == (n - &one) {
