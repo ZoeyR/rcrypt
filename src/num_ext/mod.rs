@@ -10,6 +10,7 @@ pub trait BigUintCrypto {
     /// Find the next prime from the current BigUint
     fn next_prime(&self) -> BigUint;
 
+    fn next_prime_threaded(&self) -> BigUint;
     /// use the extended euclidean algorithm to solve for (g,x,y) given (a,b) such that
     /// g = gcd(a,b) = a*x + b*y.
     fn gcdext(&self, other: &BigUint) -> (BigUint, BigUint, BigUint);
@@ -23,18 +24,11 @@ pub trait BigUintCrypto {
 
 impl BigUintCrypto for BigUint {
     fn next_prime(&self) -> BigUint {
-        let one: BigUint = One::one();
-        let two = 2.to_biguint().unwrap();
-        let mut next_prime = self.clone();
-        if &next_prime % &two == Zero::zero() {
-            next_prime = &next_prime + &one;
-        } else {
-            next_prime = &next_prime + &two;
-        }
-        while !BigUint::is_prime(&next_prime) {
-            next_prime = &next_prime + &two;
-        }
-        next_prime
+        next_prime_helper(&self.clone(), false)
+    }
+
+    fn next_prime_threaded(&self) -> BigUint {
+        next_prime_helper(&self.clone(), true)
     }
 
     fn gcdext(&self, other: &BigUint) -> (BigUint, BigUint, BigUint) {
@@ -43,15 +37,7 @@ impl BigUintCrypto for BigUint {
     }
 
     fn is_prime(n: &BigUint) -> bool {
-        let two = 2.to_biguint().unwrap();
-        let three = 3.to_biguint().unwrap();
-        if *n == three || *n == two {
-            return true;
-        }
-        if *n < two || n % two == Zero::zero() {
-            return false;
-        }
-        miller_rabin(n, 100)
+        is_prime_helper(n, false)
     }
 
     fn mod_exp(base: &BigUint, exponent: &BigUint, modulus: &BigUint) -> BigUint {
@@ -72,8 +58,34 @@ impl BigUintCrypto for BigUint {
     }
 }
 
+fn next_prime_helper(n: &BigUint, thread: bool) -> BigUint {
+    let one: BigUint = One::one();
+    let two = 2.to_biguint().unwrap();
+    let mut next_prime = n.clone();
+    if &next_prime % &two == Zero::zero() {
+        next_prime = &next_prime + &one;
+    } else {
+        next_prime = &next_prime + &two;
+    }
+    while !is_prime_helper(&next_prime, thread) {
+        next_prime = &next_prime + &two;
+    }
+    next_prime
+}
+
+fn is_prime_helper(n: &BigUint, thread: bool) -> bool {
+    let two = 2.to_biguint().unwrap();
+    let three = 3.to_biguint().unwrap();
+    if *n == three || *n == two {
+        return true;
+    }
+    if *n < two || n % two == Zero::zero() {
+        return false;
+    }
+    miller_rabin(n, 100, thread)
+}
 /// n must be greater than 3 and k indicates the number of rounds
-fn miller_rabin(n: &BigUint, k: usize) -> bool{
+fn miller_rabin(n: &BigUint, k: usize, thread: bool) -> bool{
     let one: BigUint = One::one();
     let (tx, rx) = mpsc::channel();
 
@@ -83,28 +95,32 @@ fn miller_rabin(n: &BigUint, k: usize) -> bool{
         d = d >> 1;
         s = s + &one;
     }
-    let shared_n = Arc::new(n.clone());
-    let shared_d = Arc::new(d);
-    let shared_s = Arc::new(s);
+    if thread {
+        let shared_n = Arc::new(n.clone());
+        let shared_d = Arc::new(d);
+        let shared_s = Arc::new(s);
 
-    // miller rabin lends itself to being concurrent since a is completely random
-    // here we spawn multiple threads to help speed up the process
-    for _ in 0..8 {
-        let tx = tx.clone();
-        //let thread_n = n.clone();
-        let shared_d = shared_d.clone();
-        let shared_s = shared_s.clone();
-        let shared_n = shared_n.clone();
-        thread::spawn(move || {
-            let result = miller_rabin_thread(&shared_n, &shared_d, &shared_s, k/8);
-            tx.send(result);
-            });
-    }
-
-    for _ in 0..8 {
-        if !rx.recv().ok().expect("A thread failed") {
-            return false;
+        // miller rabin lends itself to being concurrent since a is completely random
+        // here we spawn multiple threads to help speed up the process
+        for _ in 0..8 {
+            let tx = tx.clone();
+            //let thread_n = n.clone();
+            let shared_d = shared_d.clone();
+            let shared_s = shared_s.clone();
+            let shared_n = shared_n.clone();
+            thread::spawn(move || {
+                let result = miller_rabin_thread(&shared_n, &shared_d, &shared_s, k/8);
+                tx.send(result);
+                });
         }
+
+        for _ in 0..8 {
+            if !rx.recv().ok().expect("A thread failed") {
+                return false;
+            }
+        }
+    } else {
+        return miller_rabin_thread(n, &d, &s, k);
     }
     true
 }
@@ -172,6 +188,17 @@ mod test_BigUint_crypto {
         parse_bytes("4829837983753984028472098472089547098728675098723407520875297".as_bytes(), 10).unwrap();
 
         assert!(test_num.next_prime() == expected_next);
+    }
+
+    #[test]
+    fn next_prime_threaded_test() {
+        let test_num = BigUint::
+        parse_bytes("4829837983753984028472098472089547098728675098723407520875258".as_bytes(), 10).unwrap();
+
+        let expected_next = BigUint::
+        parse_bytes("4829837983753984028472098472089547098728675098723407520875297".as_bytes(), 10).unwrap();
+
+        assert!(test_num.next_prime_threaded() == expected_next);
     }
 
     #[test]
