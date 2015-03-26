@@ -10,6 +10,8 @@ pub trait BigUintCrypto {
     /// Find the next prime from the current BigUint
     fn next_prime(&self) -> BigUint;
 
+    /// Threaded version of the next_prime() operation, this is not recommended for use because it
+    /// is slower than the unthreaded version.
     fn next_prime_threaded(&self) -> BigUint;
     /// use the extended euclidean algorithm to solve for (g,x,y) given (a,b) such that
     /// g = gcd(a,b) = a*x + b*y.
@@ -109,7 +111,10 @@ fn miller_rabin(n: &BigUint, k: usize, thread: bool) -> bool{
             let shared_s = shared_s.clone();
             let shared_n = shared_n.clone();
             thread::spawn(move || {
-                let result = miller_rabin_thread(&shared_n, &shared_d, &shared_s, k/8);
+                let in_n = shared_n;
+                let in_d = shared_d;
+                let in_s = shared_s;
+                let result = miller_rabin_thread(&in_n, &in_d, &in_s, k/8);
                 tx.send(result);
                 });
         }
@@ -173,11 +178,14 @@ fn mod_exp(base: &BigUint, exponent: &BigUint, modulus: &BigUint) -> BigUint {
 
 #[cfg(test)]
 mod test_BigUint_crypto {
-    use super::{BigUintCrypto, mod_exp};
+    use super::{BigUintCrypto, mod_exp, miller_rabin};
     use num::bigint::{RandBigInt, BigUint};
     use std::num::FromPrimitive;
     use num::One;
     use rand::thread_rng;
+    use test::Bencher;
+    use std::sync::{Arc, mpsc};
+    use std::thread;
 
     #[test]
     fn next_prime_test() {
@@ -220,13 +228,76 @@ mod test_BigUint_crypto {
     }
 
     #[test]
-    #[should_fail]
+    #[should_panic(expected = "assertion failed")]
     fn is_prime_test_failuire() {
         let not_prime = BigUint::
         parse_bytes("359709793871987301975987296195681798740165298740176567105918720469720137416098423"
         .as_bytes(), 10).unwrap();
 
         assert!(BigUint::is_prime(&not_prime));
+    }
+
+    #[bench]
+    fn bench_spawn_thread_move(bench: &mut Bencher) {
+
+        bench.iter(|| {
+            let a = thread_rng().gen_biguint(300);
+            let b = thread_rng().gen_biguint(300);
+            let c = thread_rng().gen_biguint(300);
+            let shared_a = Arc::new(a);
+            let shared_b = Arc::new(b);
+            let shared_c = Arc::new(c);
+
+            thread::spawn(move || {
+                let in_a = shared_a;
+                let in_b = shared_b;
+                let in_c = shared_c;
+                });
+            });
+    }
+
+    #[bench]
+    fn bench_rand_biguint(bench: &mut Bencher) {
+        bench.iter(|| {
+            thread_rng().gen_biguint(300)
+            });
+    }
+
+    #[bench]
+    fn bench_spawn_thread(bench: &mut Bencher) {
+        bench.iter(|| {
+            thread::spawn(|| {
+                let a = 4;
+                });
+            });
+    }
+
+    #[bench]
+    fn bench_mod_exp(bench: &mut Bencher) {
+        let a = thread_rng().gen_biguint(300);
+        let b = thread_rng().gen_biguint(300);
+        let c = thread_rng().gen_biguint(300);
+        bench.iter(|| {
+            mod_exp(&a, &b, &c);
+            });
+    }
+
+    #[bench]
+    fn bench_miller_rabin(bench: &mut Bencher) {
+        let known_prime = BigUint::
+        parse_bytes("4829837983753984028472098472089547098728675098723407520875297".as_bytes(), 10).unwrap();
+        bench.iter(|| {
+            miller_rabin(&known_prime, 100, false)
+            });
+    }
+
+    #[bench]
+    fn bench_miller_rabin_thread(bench: &mut Bencher) {
+        let known_prime = BigUint::
+        parse_bytes("4829837983753984028472098472089547098728675098723407520875297".as_bytes(), 10).unwrap();
+        bench.iter(|| {
+            miller_rabin(&known_prime, 100, true)
+            });
     }
 
 }
