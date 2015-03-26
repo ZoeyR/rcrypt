@@ -119,15 +119,16 @@ fn miller_rabin(n: &BigUint, k: usize, thread: bool) -> bool{
                 });
         }
 
+        let mut prime = true;
         for _ in 0..8 {
             if !rx.recv().ok().expect("A thread failed") {
-                return false;
+                prime = false;
             }
         }
+        prime
     } else {
         return miller_rabin_thread(n, &d, &s, k);
     }
-    true
 }
 
 fn miller_rabin_thread(n: &BigUint, d: &BigUint, s: &BigUint, k: usize) -> bool {
@@ -297,6 +298,26 @@ mod test_BigUint_crypto {
         parse_bytes("4829837983753984028472098472089547098728675098723407520875297".as_bytes(), 10).unwrap();
         bench.iter(|| {
             miller_rabin(&known_prime, 100, true)
+            });
+    }
+
+    #[bench]
+    fn bench_next_prime(bench: &mut Bencher) {
+        let test_num = BigUint::
+        parse_bytes("4829837983753984028472098472089547098728675098723407520875258".as_bytes(), 10).unwrap();
+
+        bench.iter(|| {
+            test_num.next_prime()
+            });
+    }
+
+    #[bench]
+    fn bench_next_prime_threaded(bench: &mut Bencher) {
+        let test_num = BigUint::
+        parse_bytes("4829837983753984028472098472089547098728675098723407520875258".as_bytes(), 10).unwrap();
+
+        bench.iter(|| {
+            test_num.next_prime_threaded()
             });
     }
 
