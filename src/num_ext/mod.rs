@@ -180,8 +180,7 @@ fn mod_exp(base: &BigUint, exponent: &BigUint, modulus: &BigUint) -> BigUint {
 #[cfg(test)]
 mod test_BigUint_crypto {
     use super::{BigUintCrypto, mod_exp, miller_rabin};
-    use num::bigint::{RandBigInt, BigUint};
-    use std::num::FromPrimitive;
+    use num::bigint::{ToBigUint, RandBigInt, BigUint};
     use num::One;
     use rand::thread_rng;
     use test::Bencher;
@@ -212,10 +211,10 @@ mod test_BigUint_crypto {
 
     #[test]
     fn mod_exp_test() {
-        let base = BigUint::from_isize(4).unwrap();
-        let exponent = BigUint::from_isize(13).unwrap();
-        let modulus = BigUint::from_isize(497).unwrap();
-        let expected_result = BigUint::from_isize(445).unwrap();
+        let base = 4.to_biguint().unwrap();
+        let exponent = 13.to_biguint().unwrap();
+        let modulus = 497.to_biguint().unwrap();
+        let expected_result = 445.to_biguint().unwrap();
 
         assert!(mod_exp(&base, &exponent, &modulus) == expected_result);
     }
